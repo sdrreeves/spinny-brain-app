@@ -444,7 +444,7 @@ html.locked, html.locked body { overflow: hidden; overscroll-behavior: none; hei
   function statusNote() {
     if (state.dbState === "signin") return "";
     if (state.dbState === "loading") return '<p class="note">Loading your data…</p>';
-    if (state.dbState === "slow") return '<p class="note">Your data can’t be reached yet. It will appear once the connection answers.</p>';
+    if (state.dbState === "slow") return '<p class="note">Your data can’t be reached yet' + (state.lastErr ? ' (' + esc(state.lastErr) + ')' : '') + '. Close and reopen the app, or sign out from the menu and back in.</p>';
     if (state.dbState === "off") return '<p class="note err">The app couldn’t start its database. Check your connection and reopen it.</p>';
     return "";
   }
@@ -731,9 +731,11 @@ html.locked, html.locked body { overflow: hidden; overscroll-behavior: none; hei
     if (!cfg || !cfg.apiKey || !window.firebase) { state.dbState = "off"; route(); return; }
     firebase.initializeApp(cfg);
     var fs = firebase.firestore();
-    try { fs.enablePersistence({ synchronizeTabs: true }).catch(function () {}); } catch (e) {}
+    try { fs.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch (e) {}
     var unsubs = [];
+    var bootTimer = setTimeout(function () { if (state.dbState === "loading") { state.dbState = "slow"; state.lastErr = "sign-in check didn't finish"; showSignOut(); rerender(); } }, 10000);
     firebase.auth().onAuthStateChanged(function (user) {
+      clearTimeout(bootTimer);
       unsubs.forEach(function (u) { try { u(); } catch (e) {} }); unsubs = [];
       if (!user) { APPDB = null; state.dbState = "signin"; showSignIn(); return; }
       hideSignIn();
@@ -742,7 +744,8 @@ html.locked, html.locked body { overflow: hidden; overscroll-behavior: none; hei
       var db = APPDB;
       state.dbState = "loading"; state.loaded = {};
       slowTimer = setTimeout(function () { if (state.dbState === "loading") { state.dbState = "slow"; rerender(); } }, 10000);
-      function onErr() { if (state.dbState !== "ready") state.dbState = "slow"; clearTimeout(slowTimer); rerender(); }
+      showSignOut();
+      function onErr(e) { state.lastErr = (e && (e.code || e.message)) || "unknown error"; if (state.dbState !== "ready") state.dbState = "slow"; clearTimeout(slowTimer); rerender(); }
       unsubs.push(db.collection("briefings").orderBy("date", "desc").limit(120).onSnapshot(function (s) { state.briefings = docs(s); markLoaded("b", s); rerender(); }, onErr));
       unsubs.push(db.collection("reviews").orderBy("date", "desc").limit(60).onSnapshot(function (s) { state.reviews = docs(s); markLoaded("r", s); rerender(); }, onErr));
       unsubs.push(db.collection("wiki").orderBy("title").limit(500).onSnapshot(function (s) { state.wiki = docs(s); markLoaded("w", s); rerender(); }, onErr));
@@ -757,6 +760,13 @@ html.locked, html.locked body { overflow: hidden; overscroll-behavior: none; hei
   })();
 
   // ---------- sign in ----------
+  function showSignOut() {
+    if (document.getElementById("sign-out")) return;
+    var b = document.createElement("a"); b.href = "#today"; b.id = "sign-out"; b.textContent = "Sign out";
+    b.style.cssText = "margin-top:auto;color:var(--muted)";
+    b.addEventListener("click", function (e) { e.preventDefault(); try { firebase.auth().signOut(); } catch (x) {} });
+    drawer.appendChild(b);
+  }
   var signin = document.getElementById("signin");
   function showSignIn() { signin.hidden = false; document.getElementById("si-email").focus(); }
   function hideSignIn() { signin.hidden = true; }

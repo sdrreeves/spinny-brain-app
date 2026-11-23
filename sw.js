@@ -1,5 +1,5 @@
 // Keeps the app shell available offline. Data comes from Firebase, which caches on its own.
-const CACHE = "spinny-brain-v1";
+const CACHE = "spinny-brain-v2";
 const SHELL = ["./", "index.html", "firebase-config.js", "manifest.webmanifest", "icon-180.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
